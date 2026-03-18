@@ -33,6 +33,9 @@ dependencies = [
 "Documentation" = "https://basil.readthedocs.io/en/latest/"
 "Repository" = "https://github.com/SiLab-Bonn/basil/"
 
+[project.optional-dependencies]
+hw = ["pyserial", "PyVISA"]
+
 [tool.setuptools]
 include-package-data = true
 
