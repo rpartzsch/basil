@@ -40,7 +40,7 @@ Timing diagrams
 
 The bus signals are ``BUS_CLK``, ``BUS_WR``, ``BUS_RD``, ``BUS_ADD`` (address), and ``BUS_DATA``. Writes and reads each complete in a single clock cycle.
 
-**Single write:** assert ``BUS_WR`` for one cycle while placing the address and data on the bus.
+**Single write:** Assert ``BUS_WR`` for one cycle while placing the address and data on the bus.
 
 .. raw:: html
 
@@ -49,12 +49,12 @@ The bus signals are ``BUS_CLK``, ``BUS_WR``, ``BUS_RD``, ``BUS_ADD`` (address), 
       { name: "BUS_CLK",  wave: "p.." },
       { name: "BUS_WR",  wave: "010" },
       { name: "BUS_RD",  wave: "0.." },
-      { name: "BUS_ADD",  wave: "x3x",   data: "data" },
-      { name: "BUS_DATA", wave: "x4x",   data: "addr" },
+      { name: "BUS_ADD",  wave: "x4x",   data: "addr" },
+      { name: "BUS_DATA", wave: "x5x",   data: "data" },
     ]}
     </script>
 
-**Single read:** assert ``BUS_RD`` for one cycle with the address. The module responds with data on the following cycle.
+**Single read:** Assert ``BUS_RD`` for one cycle with the address. Module responds with data on the following cycle.
 
 .. raw:: html
 
@@ -63,7 +63,7 @@ The bus signals are ``BUS_CLK``, ``BUS_WR``, ``BUS_RD``, ``BUS_ADD`` (address), 
       { name: "BUS_CLK",  wave: "p..." },
       { name: "BUS_WR",  wave: "0..." },
       { name: "BUS_RD",  wave: "010." },
-      { name: "BUS_ADD",  wave: "xx5x",   data: "data" },
-      { name: "BUS_DATA", wave: "x4xx",   data: "addr" },
+      { name: "BUS_ADD",  wave: "x4x.",   data: "addr" },
+      { name: "BUS_DATA", wave: "xx5x",   data: "data" },
     ]}
     </script>
