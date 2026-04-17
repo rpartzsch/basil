@@ -72,6 +72,8 @@ begin
     end
 end
 
+localparam POINTER_SIZE = 32;
+
 // read reg
 wire [31:0] CONF_SIZE_BYTE; // write data count, 1 - 2 - 3, in units of byte
 reg [31:0] CONF_SIZE_BYTE_BUF;
@@ -104,8 +106,10 @@ end
 
 always @(posedge BUS_CLK)
 begin
-    if (BUS_ADD == 4 && BUS_RD)
-        CONF_SIZE_BYTE_BUF <= CONF_SIZE_BYTE;
+    if (BUS_ADD == 4 && BUS_RD) begin
+        // Pad upper bits with 0s if pointer size less than 32
+        CONF_SIZE_BYTE_BUF <= {{(32-POINTER_SIZE){1'b0}}, CONF_SIZE_BYTE[POINTER_SIZE-1:0]};
+    end
 end
 
 //reg                   FIFO_READ_NEXT_OUT_BUF;
@@ -115,11 +119,10 @@ wire FULL_BUF;
 
 assign FIFO_READ_NEXT_OUT = !FULL_BUF;
 
-localparam POINTER_SIZE = 32;
-
 generic_fifo #(
     .DATA_SIZE(32),
-    .DEPTH(DEPTH)
+    .DEPTH(DEPTH),
+    .POINTER_SIZE(POINTER_SIZE)
 ) i_buf_fifo (
     .clk(BUS_CLK),
     .reset(RST),
