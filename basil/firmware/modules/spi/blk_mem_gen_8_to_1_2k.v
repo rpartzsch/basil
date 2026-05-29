@@ -4,19 +4,27 @@
  * SiLab, Institute of Physics, University of Bonn
  * ------------------------------------------------------------
  *
- * Asymmetric true dual-port BRAM: 2048 x 8-bit (Port A) / 16384 x 1-bit (Port B).
- * Total capacity: 16,384 bits → inferred as RAMB18E1 on 7-series (Kintex-7).
+ * Asymmetric dual-port memory: 2048 x 8-bit (Port A) / 16384 x 1-bit (Port B).
+ * Total capacity: 16,384 bits → intended to infer one 7-series RAMB18E1 in
+ * block-RAM memory mode. See AMD/Xilinx UG473, 7 Series FPGAs Memory Resources:
+ * https://docs.amd.com/v/u/en-US/ug473_7Series_Memory_Resources
  *
  * Replaces the legacy RAMB16_S1_S9 primitive (Spartan-3/Virtex-4 era),
  * which is unsupported in Vivado.
  *
  * Inference strategy:
- *   Underlying array is 16384 × 1-bit. Port B (1-bit) accesses it directly.
- *   Port A (8-bit) uses a single always block with a procedural for loop
- *   that expands to 8 consecutive 1-bit locations at {ADDRA, i[2:0]}.
- *   Vivado sees only two clocked ports and infers a single RAMB18E1 in
- *   true dual-port (TDP) mode with asymmetric widths.
+ *   Underlying array is 2048 × 8-bit. Port A accesses full bytes directly.
+ *   Port B maps its 14-bit bit address to byte address ADDRB[13:3] and bit
+ *   index ADDRB[2:0]. This keeps the memory declaration in a conventional
+ *   byte-wide shape for Vivado inference while preserving the legacy 8-to-1
+ *   asymmetric interface.
  *   (* ram_style = "block" *) attribute forces BRAM over distributed RAM.
+ *
+ * This is deliberately not the dedicated BRAM FIFO mode described in UG473.
+ * Although the SPI data path is FIFO-like (bytes are played out serially),
+ * spi_core owns the byte/bit addresses, repeat count, waits, and replay control.
+ * A BRAM FIFO primitive would hide/destructively advance those pointers, while
+ * this block must remain an addressable, replayable SPI pattern/readback memory.
  *
  * Port mapping (unchanged from original):
  *   Port A: 8-bit wide, 2048 deep  — ADDRA[10:0], DINA[7:0], DOUTA[7:0], WEA
@@ -28,7 +36,7 @@
 `ifndef BLK_MEM_GEN_8_TO_1_2K
 `define BLK_MEM_GEN_8_TO_1_2K
 
-`timescale 1ps/1ps
+`timescale 1ns/1ps
 `default_nettype none
 
 
@@ -53,53 +61,50 @@ input  wire [7 : 0] DINA;
 input  wire [0 : 0] DINB;
 
 // -------------------------------------------------------------------
-// Underlying array: 16384 × 1-bit, total 16,384 bits.
-// Vivado infers a single RAMB18E1 in true-dual-port mode with
-// asymmetric widths (Port A = 8-bit, Port B = 1-bit).
+// Underlying array: 2048 × 8-bit = 16,384 bits.
+// Port B's 14-bit address is split into byte address and bit index.
 // -------------------------------------------------------------------
 
+// The generic module supports two writable ports for legacy compatibility, but
+// current SPI instances enable only one write port per memory. Verilator cannot
+// prove that for the default parameterization and reports MULTIDRIVEN.
+// verilator lint_off MULTIDRIVEN
 (* ram_style = "block" *)
-reg [0:0] ram [0:16383];
+reg [7:0] ram [0:2047];
+// verilator lint_on MULTIDRIVEN
+
+wire [10:0] addrb_word = ADDRB[13:3];
+wire [2:0] addrb_bit = ADDRB[2:0];
 
 // ------------------------------
-// Port A — 8-bit synchronous (procedural for loop, one port)
-//
-// ADDRA[10:0] selects a word; bit i lives at {ADDRA, i[2:0]}.
-// The procedural for loop exposes only a single write port,
-// matching the Vivado BRAM inference requirements.
+// Port A — 8-bit synchronous read/write or read-only.
 // ------------------------------
-integer i;
-
 generate
     if (PORT_A_WRITABLE) begin : port_a_read_write
         always @(posedge CLKA) begin
-            for (i = 0; i < 8; i = i + 1) begin
-                DOUTA[i] <= ram[{ADDRA, i[2:0]}];
-                if (WEA)
-                    ram[{ADDRA, i[2:0]}] <= DINA[i];
-            end
+            DOUTA <= ram[ADDRA];  // read-first: capture old value
+            if (WEA)
+                ram[ADDRA] <= DINA;
         end
     end else begin : port_a_read_only
-        always @(posedge CLKA) begin
-            for (i = 0; i < 8; i = i + 1)
-                DOUTA[i] <= ram[{ADDRA, i[2:0]}];
-        end
+        always @(posedge CLKA)
+            DOUTA <= ram[ADDRA];
     end
 endgenerate
 
 // ------------------------------
-// Port B — 1-bit synchronous (simple, one port)
+// Port B — 1-bit synchronous read/write or read-only.
 // ------------------------------
 generate
     if (PORT_B_WRITABLE) begin : port_b_read_write
         always @(posedge CLKB) begin
-            DOUTB          <= ram[ADDRB];
+            DOUTB[0] <= ram[addrb_word][addrb_bit];  // read-first: capture old value
             if (WEB)
-                ram[ADDRB] <= DINB[0];
+                ram[addrb_word][addrb_bit] <= DINB[0];
         end
     end else begin : port_b_read_only
         always @(posedge CLKB)
-            DOUTB <= ram[ADDRB];
+            DOUTB[0] <= ram[addrb_word][addrb_bit];
     end
 endgenerate
 
