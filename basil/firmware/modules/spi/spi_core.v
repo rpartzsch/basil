@@ -50,15 +50,15 @@ module spi_core #(
 
   assign RST = BUS_RST || SOFT_RST;
 
-  localparam DEF_BIT_OUT = 8 * MEM_BYTES;
+  localparam DefBitOut = 8 * MEM_BYTES;
 
   always @(posedge BUS_CLK) begin
     if (RST) begin
       status_regs[0]  <= 0;
       status_regs[1]  <= 0;
       status_regs[2]  <= 0;
-      status_regs[3]  <= DEF_BIT_OUT[7:0];  //bits
-      status_regs[4]  <= DEF_BIT_OUT[15:8];  //bits
+      status_regs[3]  <= DefBitOut[7:0];  //bits
+      status_regs[4]  <= DefBitOut[15:8];  //bits
       status_regs[5]  <= 4;  //wait
       status_regs[6]  <= 0;  //wait
       status_regs[7]  <= 0;  //wait
@@ -116,6 +116,7 @@ module spi_core #(
     end
   end
 
+
   always @(*) begin
     if (PREV_BUS_ADD < 16) BUS_DATA_OUT = BUS_DATA_OUT_REG;
     else if (PREV_BUS_ADD < 16 + MEM_BYTES) BUS_DATA_OUT = BUS_IN_MEM;
@@ -145,10 +146,12 @@ module spi_core #(
 
   wire SDI_MEM;
 
-  blk_mem_gen_8_to_1_2k #(
-      .PORT_A_WRITABLE(1),
-      .PORT_B_WRITABLE(0)
-  ) memout (
+  // SPI transmit pattern memory. The bus writes addressable 8-bit bytes and
+  // the SPI clock domain reads them as a 1-bit serial stream. This is FIFO-like
+  // at the system level, but intentionally implemented as addressable BRAM
+  // memory (not RAMB18/FIFO18 FIFO mode; see UG473) because this state machine
+  // owns bit addresses, waits, repeats, and replay of the same programmed data.
+  blk_mem_gen_8_to_1_2k memout (
       .CLKA (BUS_CLK),
       .CLKB (SPI_CLK),
       .DOUTA(BUS_IN_MEM_IB),
@@ -168,10 +171,11 @@ module spi_core #(
   assign ADDRB_MIN = out_bit_cnt - 1;
   reg SEN_INT;
 
-  blk_mem_gen_8_to_1_2k #(
-      .PORT_A_WRITABLE(0),
-      .PORT_B_WRITABLE(1)
-  ) memin (
+  // SPI receive/readback memory. The SPI clock domain writes one captured SDO
+  // bit at a time, and the bus reads the same storage back as addressable bytes.
+  // As above, this must remain RAM-style storage rather than dedicated BRAM FIFO
+  // mode so spi_core can control the exact bit addresses and transaction timing.
+  blk_mem_gen_8_to_1_2k memin (
       .CLKA (BUS_CLK),
       .CLKB (SPI_CLK),
       .DOUTA(BUS_OUT_MEM_IB),
